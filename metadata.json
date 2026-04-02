@@ -1,0 +1,5 @@
+{
+  "name": "Dashboard de Operações Policiais",
+  "description": "Análise de dados de operações policiais com detecção de duplicidades e filtros avançados.",
+  "requestFramePermissions": []
+}
