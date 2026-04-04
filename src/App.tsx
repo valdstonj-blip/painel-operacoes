@@ -371,7 +371,6 @@ export default function App() {
     if (!importFile) return;
 
     Papa.parse(importFile, {
-      delimiter: ";",
       header: true,
       skipEmptyLines: true,
       transformHeader: (header) => header.trim(),
@@ -384,15 +383,15 @@ export default function App() {
           };
 
           return {
-            id: getVal(["N da Operação", "Nº Operação", "N da Operacao"]),
+            id: getVal(["N da Operação", "Nº Operação", "N da Operacao", "N da Operação"]),
             date: getVal(["Data"]),
             time: getVal(["Hora"]),
             uope: getVal(["UOpE", "Uope", "Unidade"]),
             location: getVal(["Local"]).replace(/^"|"$/g, ''),
-            circumstance: getVal(["Circustância", "Circunstância"]),
-            initialCommunication: getVal(["Comunicação Inicial", "Comunicacao Inicial"]),
-            finalReport: getVal(["Relatório Final", "Relatorio Final"]),
-            status: getVal(["Situação", "Situacao", "Status"])
+            circumstance: getVal(["Circustância", "Circunstância", "Circustancia"]),
+            initialCommunication: getVal(["Comunicação Inicial", "Comunicacao Inicial", "Comunicação Inicial"]),
+            finalReport: getVal(["Relatório Final", "Relatorio Final", "Relatório Final"]),
+            status: getVal(["Situação", "Situacao", "Status", "Situação"])
           };
         }).filter(op => op.id && op.uope); // Filter out rows without ID or UOpE
 
@@ -403,7 +402,7 @@ export default function App() {
           setImportFile(null);
           setImportError(null);
         } else {
-          setImportError("Nenhum dado válido encontrado no arquivo. Verifique se o delimitador é ponto e vírgula (;) e se os cabeçalhos estão corretos.");
+          setImportError("Nenhum dado válido encontrado no arquivo. Verifique se os cabeçalhos das colunas estão corretos (N da Operação, Data, UOpE, etc) e se o arquivo não está vazio.");
         }
       },
       error: (err) => {
@@ -969,7 +968,7 @@ export default function App() {
                 <Info className="text-blue-500 shrink-0" size={20} />
                 <div className="text-sm text-blue-700">
                   <p className="font-bold mb-1">Requisitos do Arquivo:</p>
-                  <p>O arquivo deve ser um CSV separado por ponto e vírgula (;) contendo as colunas padrão.</p>
+                  <p>O arquivo deve ser um CSV (separado por vírgula ou ponto e vírgula) contendo as colunas padrão do sistema ADPF.</p>
                 </div>
               </div>
               
