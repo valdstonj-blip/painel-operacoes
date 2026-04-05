@@ -95,6 +95,7 @@ export default function App() {
 
     return {
       total: operations.length,
+      uniqueOperations: Object.keys(idCounts).length,
       duplicates: duplicateIds.length,
       byUope: Object.entries(uopeCounts)
         .filter(([name]) => name.trim() !== "")
@@ -323,15 +324,16 @@ export default function App() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text(`Volume Total de Registros Processados: ${filteredData.length}`, 14, 48);
-    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.uopeList.length}`, 14, 54);
+    doc.text(`Nº de Operações Reais (IDs Únicos): ${stats.uniqueOperations}`, 14, 54);
+    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.uopeList.length}`, 14, 60);
     
     // New clarity section for duplicates
     doc.setTextColor(185, 28, 28); // rose-700
-    doc.text(`IDs com Conflito de Duplicidade: ${stats.duplicates}`, 14, 60);
-    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.totalDuplicates}`, 14, 66);
+    doc.text(`IDs com Conflito de Duplicidade: ${stats.duplicates}`, 14, 66);
+    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.totalDuplicates}`, 14, 72);
     
     doc.setTextColor(30, 41, 59);
-    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 72);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 78);
 
     // Table Data - Sorted by Total
     const tableRows = filteredSummary.uopeList.map((item, index) => [
@@ -464,7 +466,7 @@ export default function App() {
       ) : (
         <>
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
           <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
             <Info size={24} />
@@ -475,11 +477,20 @@ export default function App() {
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
+          <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
+            <CheckCircle size={24} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Operações Reais</p>
+            <p className="text-2xl font-bold text-emerald-600">{stats.uniqueOperations}</p>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
           <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
             <AlertTriangle size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Operações Repetidas (IDs)</p>
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">IDs Duplicados</p>
             <p className="text-2xl font-bold text-amber-600">{stats.duplicates}</p>
           </div>
         </div>

@@ -12,6 +12,7 @@ export interface Operation {
 
 export interface DashboardStats {
   total: number;
+  uniqueOperations: number;
   duplicates: number;
   byUope: { name: string; value: number }[];
   byStatus: { name: string; value: number }[];
