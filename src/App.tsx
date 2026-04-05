@@ -96,6 +96,7 @@ export default function App() {
     return {
       total: operations.length,
       uniqueOperations: Object.keys(idCounts).length,
+      correctlyLaunched: Object.keys(idCounts).length - duplicateIds.length,
       duplicates: duplicateIds.length,
       byUope: Object.entries(uopeCounts)
         .filter(([name]) => name.trim() !== "")
@@ -224,15 +225,15 @@ export default function App() {
     doc.setFontSize(10);
     doc.text(`Total de Registros Localizados: ${filteredData.length}`, 14, 42);
     doc.setTextColor(185, 28, 28); // rose-700
-    doc.text(`Registros com Duplicidade de ID: ${filteredSummary.totalDuplicates}`, 14, 47);
+    doc.text(`Registros com Duplicidade de ID: ${filteredSummary.totalDuplicates}`, 14, 49);
     
     if (filterUope) {
       doc.setTextColor(51, 65, 85);
-      doc.text(`Unidade Selecionada: ${filterUope}`, 14, 52);
+      doc.text(`Unidade Selecionada: ${filterUope}`, 14, 56);
     }
 
     // Detailed Duplicate Info if any
-    let currentY = filterUope ? 58 : 53;
+    let currentY = filterUope ? 65 : 58;
     if (duplicateIds.length > 0) {
       doc.setFontSize(9);
       doc.setTextColor(180, 83, 9); // amber-700
@@ -324,16 +325,17 @@ export default function App() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text(`Volume Total de Registros Processados: ${filteredData.length}`, 14, 48);
-    doc.text(`Nº de Operações Reais (IDs Únicos): ${stats.uniqueOperations}`, 14, 54);
-    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.uopeList.length}`, 14, 60);
+    doc.text(`Nº de Operações Reais (IDs Únicos): ${stats.uniqueOperations}`, 14, 55);
+    doc.text(`- Registros sem Duplicidade (Lançados 1 vez): ${stats.correctlyLaunched}`, 14, 62);
+    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.uopeList.length}`, 14, 69);
     
     // New clarity section for duplicates
     doc.setTextColor(185, 28, 28); // rose-700
-    doc.text(`IDs com Conflito de Duplicidade: ${stats.duplicates}`, 14, 66);
-    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.totalDuplicates}`, 14, 72);
+    doc.text(`IDs com Conflito de Duplicidade: ${stats.duplicates}`, 14, 76);
+    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.totalDuplicates}`, 14, 83);
     
     doc.setTextColor(30, 41, 59);
-    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 78);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 90);
 
     // Table Data - Sorted by Total
     const tableRows = filteredSummary.uopeList.map((item, index) => [
@@ -344,7 +346,7 @@ export default function App() {
     ]);
 
     autoTable(doc, {
-      startY: 82,
+      startY: 100,
       head: [["Pos.", "Unidade Operacional (UOpE)", "Qtd. Operações (Linhas)", "% do Total"]],
       body: tableRows,
       theme: 'grid',
@@ -483,6 +485,9 @@ export default function App() {
           <div>
             <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Operações Reais</p>
             <p className="text-2xl font-bold text-emerald-600">{stats.uniqueOperations}</p>
+            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
+              {stats.correctlyLaunched} sem duplicidade
+            </p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
