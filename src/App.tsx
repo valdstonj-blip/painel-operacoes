@@ -13,7 +13,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  AreaChart,
+  Area
 } from "recharts";
 import {
   Search,
@@ -26,18 +28,45 @@ import {
   Calendar,
   RotateCcw,
   Bell,
-  TrendingUp
+  TrendingUp,
+  FileText
 } from "lucide-react";
 import { rawData } from "./data";
 import { Operation, DashboardStats } from "./types";
 
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
+const COLORS = [
+  "#1e293b", // Dark Blue
+  "#ea580c", // Orange
+  "#16a34a", // Green
+  "#0ea5e9", // Sky Blue
+  "#eab308", // Yellow
+  "#9333ea", // Purple
+  "#dc2626", // Red
+  "#2563eb", // Blue
+  "#4f46e5", // Indigo
+  "#f97316", // Orange-light
+  "#06b6d4", // Cyan
+  "#8b5cf6", // Violet
+  "#ec4899", // Pink
+  "#10b981", // Emerald
+  "#f43f5e", // Rose
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  "Finalizado": "#1e293b",
+  "Em andamento": "#ea580c",
+  "Cancelado": "#dc2626",
+  "Pendente": "#eab308"
+};
 
 // Helper to parse DD/MM/YYYY to timestamp (local time)
 const parseDateToTimestamp = (dateStr: string) => {
   const [day, month, year] = dateStr.split('/').map(Number);
   return new Date(year, month - 1, day).getTime();
 };
+
+// Helper to normalize IDs for consistent matching
+const normalizeId = (id: string) => id.trim().toUpperCase().replace(/\s+/g, '');
 
 export default function App() {
   const [operations, setOperations] = useState<Operation[]>([]);
@@ -68,68 +97,6 @@ export default function App() {
     setEndDate("");
   };
 
-  // Analysis logic
-  const stats = useMemo((): DashboardStats => {
-    const idCounts: Record<string, number> = {};
-    const uopeCounts: Record<string, number> = {};
-    const statusCounts: Record<string, number> = {};
-    const uopeDuplicateCounts: Record<string, number> = {};
-
-    operations.forEach((op) => {
-      idCounts[op.id] = (idCounts[op.id] || 0) + 1;
-      uopeCounts[op.uope] = (uopeCounts[op.uope] || 0) + 1;
-      statusCounts[op.status] = (statusCounts[op.status] || 0) + 1;
-    });
-
-    const duplicateIds = Object.keys(idCounts).filter((id) => idCounts[id] > 1);
-    
-    // Count duplicates per UOpE
-    operations.forEach((op) => {
-      if (duplicateIds.includes(op.id) && op.uope.trim() !== "") {
-        uopeDuplicateCounts[op.uope] = (uopeDuplicateCounts[op.uope] || 0) + 1;
-      }
-    });
-
-    const mostDuplicatedUopeEntry = Object.entries(uopeDuplicateCounts)
-      .sort((a, b) => b[1] - a[1])[0];
-
-    return {
-      total: operations.length,
-      uniqueOperations: Object.keys(idCounts).length,
-      correctlyLaunched: Object.keys(idCounts).length - duplicateIds.length,
-      duplicates: duplicateIds.length,
-      byUope: Object.entries(uopeCounts)
-        .filter(([name]) => name.trim() !== "")
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value),
-      byStatus: Object.entries(statusCounts)
-        .filter(([name]) => name.trim() !== "")
-        .map(([name, value]) => ({ name, value })),
-      duplicateIds,
-      mostDuplicatedUope: mostDuplicatedUopeEntry ? { name: mostDuplicatedUopeEntry[0], count: mostDuplicatedUopeEntry[1] } : undefined,
-      topDuplicatedUopes: Object.entries(uopeDuplicateCounts)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5)
-    };
-  }, [operations]);
-
-  const duplicateAlerts = useMemo(() => {
-    const idMap: Record<string, Operation[]> = {};
-    operations.forEach(op => {
-      if (!idMap[op.id]) idMap[op.id] = [];
-      idMap[op.id].push(op);
-    });
-
-    return Object.entries(idMap)
-      .filter(([id, ops]) => ops.length > 1)
-      .map(([id, ops]) => ({
-        id,
-        count: ops.length,
-        ops
-      }));
-  }, [operations]);
-
   const filteredData = useMemo(() => {
     return operations.filter((op) => {
       const opTime = parseDateToTimestamp(op.date);
@@ -158,30 +125,107 @@ export default function App() {
   }, [operations, searchTerm, filterUope, filterId, filterStatus, filterFinalReport, filterCircumstance, startDate, endDate]);
 
   const filteredSummary = useMemo(() => {
-    const uopeCounts: Record<string, { total: number; duplicates: number }> = {};
-    const idCounts: Record<string, number> = {};
+    const uopeUniqueIds: Record<string, Set<string>> = {};
+    const allUniqueIds = new Set<string>();
     
     filteredData.forEach(op => {
-      idCounts[op.id] = (idCounts[op.id] || 0) + 1;
+      const nid = normalizeId(op.id);
+      allUniqueIds.add(nid);
+      
+      if (!uopeUniqueIds[op.uope]) uopeUniqueIds[op.uope] = new Set();
+      uopeUniqueIds[op.uope].add(nid);
     });
 
-    filteredData.forEach(op => {
-      if (!uopeCounts[op.uope]) uopeCounts[op.uope] = { total: 0, duplicates: 0 };
-      uopeCounts[op.uope].total++;
-      if (idCounts[op.id] > 1) {
-        uopeCounts[op.uope].duplicates++;
+    const uniqueCount = allUniqueIds.size;
+    const extraLines = filteredData.length - uniqueCount;
+
+    return {
+      uopeList: Object.entries(uopeUniqueIds)
+        .map(([name, ids]) => ({ name, total: ids.size }))
+        .sort((a, b) => b.total - a.total),
+      uniqueCount,
+      extraLines,
+      activeUnits: Object.keys(uopeUniqueIds).length
+    };
+  }, [filteredData]);
+
+  // Analysis logic
+  const stats = useMemo((): DashboardStats => {
+    const idCounts: Record<string, number> = {};
+    const uopeCounts: Record<string, number> = {};
+    const statusCounts: Record<string, number> = {};
+    const circumstanceCounts: Record<string, number> = {};
+    const dateCounts: Record<string, number> = {};
+    const uopeDuplicateCounts: Record<string, number> = {};
+
+    filteredData.forEach((op) => {
+      const nid = normalizeId(op.id);
+      idCounts[nid] = (idCounts[nid] || 0) + 1;
+      uopeCounts[op.uope] = (uopeCounts[op.uope] || 0) + 1;
+      statusCounts[op.status] = (statusCounts[op.status] || 0) + 1;
+      circumstanceCounts[op.circumstance] = (circumstanceCounts[op.circumstance] || 0) + 1;
+      if (op.status === "Finalizado") {
+        dateCounts[op.date] = (dateCounts[op.date] || 0) + 1;
       }
     });
 
-    const totalDuplicates = filteredData.filter(op => idCounts[op.id] > 1).length;
+    const duplicateIds = Object.keys(idCounts).filter((id) => idCounts[id] > 1);
+    
+    // Count duplicates per UOpE
+    filteredData.forEach((op) => {
+      const nid = normalizeId(op.id);
+      if (duplicateIds.includes(nid) && op.uope.trim() !== "") {
+        uopeDuplicateCounts[op.uope] = (uopeDuplicateCounts[op.uope] || 0) + 1;
+      }
+    });
+
+    const mostDuplicatedUopeEntry = Object.entries(uopeDuplicateCounts)
+      .sort((a, b) => b[1] - a[1])[0];
 
     return {
-      uopeList: Object.entries(uopeCounts)
-        .map(([name, stats]) => ({ name, ...stats }))
-        .sort((a, b) => b.total - a.total),
-      totalDuplicates
+      total: filteredData.length,
+      uniqueOperations: Object.keys(idCounts).length,
+      correctlyLaunched: Object.keys(idCounts).length - duplicateIds.length,
+      duplicates: duplicateIds.length,
+      byUope: Object.entries(uopeCounts)
+        .filter(([name]) => name.trim() !== "")
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+      byStatus: Object.entries(statusCounts)
+        .filter(([name]) => name.trim() !== "")
+        .map(([name, value]) => ({ name, value })),
+      byCircumstance: Object.entries(circumstanceCounts)
+        .filter(([name]) => name.trim() !== "")
+        .map(([name, value]) => ({ name, value })),
+      byDate: Object.entries(dateCounts)
+        .map(([name, value]) => ({ name, value, timestamp: parseDateToTimestamp(name) }))
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(({ name, value }) => ({ name, value })),
+      duplicateIds,
+      mostDuplicatedUope: mostDuplicatedUopeEntry ? { name: mostDuplicatedUopeEntry[0], count: mostDuplicatedUopeEntry[1] } : undefined,
+      topDuplicatedUopes: Object.entries(uopeDuplicateCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5)
     };
   }, [filteredData]);
+
+  const duplicateAlerts = useMemo(() => {
+    const idMap: Record<string, Operation[]> = {};
+    operations.forEach(op => {
+      const nid = normalizeId(op.id);
+      if (!idMap[nid]) idMap[nid] = [];
+      idMap[nid].push(op);
+    });
+
+    return Object.entries(idMap)
+      .filter(([nid, ops]) => ops.length > 1)
+      .map(([nid, ops]) => ({
+        id: ops[0].id, // Use the original ID format from the first occurrence
+        count: ops.length,
+        ops
+      }));
+  }, [operations]);
 
   const isAnyFilterActive = !!(searchTerm || filterUope || filterId || filterStatus || filterFinalReport || filterCircumstance || startDate || endDate);
 
@@ -198,11 +242,12 @@ export default function App() {
     // Calculate duplicates within filtered data for highlighting
     const idCounts: Record<string, number> = {};
     filteredData.forEach(op => {
-      idCounts[op.id] = (idCounts[op.id] || 0) + 1;
+      const nid = normalizeId(op.id);
+      idCounts[nid] = (idCounts[nid] || 0) + 1;
     });
     const duplicateIds = Object.entries(idCounts)
       .filter(([_, count]) => count > 1)
-      .map(([id]) => id);
+      .map(([nid]) => nid);
 
     // Header
     doc.setFontSize(18);
@@ -223,9 +268,9 @@ export default function App() {
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Total de Registros Localizados: ${filteredData.length}`, 14, 42);
+    doc.text(`Volume Total de Registros: ${filteredData.length}`, 14, 42);
     doc.setTextColor(185, 28, 28); // rose-700
-    doc.text(`Registros com Duplicidade de ID: ${filteredSummary.totalDuplicates}`, 14, 49);
+    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.extraLines}`, 14, 49);
     
     if (filterUope) {
       doc.setTextColor(51, 65, 85);
@@ -273,7 +318,8 @@ export default function App() {
         // Highlight duplicate rows in light amber
         if (data.section === 'body') {
           const rowId = filteredData[data.row.index].id;
-          if (idCounts[rowId] > 1) {
+          const nid = normalizeId(rowId);
+          if (idCounts[nid] > 1) {
             data.cell.styles.fillColor = [254, 243, 199]; // amber-100
             data.cell.styles.textColor = [146, 64, 14]; // amber-800
           }
@@ -324,30 +370,25 @@ export default function App() {
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Volume Total de Registros Processados: ${filteredData.length}`, 14, 48);
-    doc.text(`Nº de Operações Reais (IDs Únicos): ${stats.uniqueOperations}`, 14, 55);
-    doc.text(`- Registros sem Duplicidade (Lançados 1 vez): ${stats.correctlyLaunched}`, 14, 62);
-    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.uopeList.length}`, 14, 69);
-    
-    // New clarity section for duplicates
-    doc.setTextColor(185, 28, 28); // rose-700
-    doc.text(`IDs com Conflito de Duplicidade: ${stats.duplicates}`, 14, 76);
-    doc.text(`Total de Linhas em Duplicidade: ${filteredSummary.totalDuplicates}`, 14, 83);
+    doc.text(`Volume Total de Registros: ${filteredData.length}`, 14, 48);
+    doc.text(`Nº de Operações Realizadas: ${filteredSummary.uniqueCount}`, 14, 55);
+    doc.text(`Unidades Operacionais Ativas: ${filteredSummary.activeUnits}`, 14, 62);
     
     doc.setTextColor(30, 41, 59);
-    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 90);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 72);
 
     // Table Data - Sorted by Total
+    // Filter to only show UOpEs with unique operations
     const tableRows = filteredSummary.uopeList.map((item, index) => [
       (index + 1).toString(),
       item.name,
       item.total.toString(),
-      `${((item.total / filteredData.length) * 100).toFixed(1)}%`
+      `${((item.total / filteredSummary.uniqueCount) * 100).toFixed(1)}%`
     ]);
 
     autoTable(doc, {
-      startY: 100,
-      head: [["Pos.", "Unidade Operacional (UOpE)", "Qtd. Operações (Linhas)", "% do Total"]],
+      startY: 80,
+      head: [["Pos.", "Unidade Operacional (UOpE)", "Qtd. Operações", "% do Total"]],
       body: tableRows,
       theme: 'grid',
       headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
@@ -445,103 +486,111 @@ export default function App() {
 
       {/* Main Content Area */}
       {operations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border-2 border-dashed border-slate-200 shadow-sm animate-in fade-in zoom-in duration-500">
-          <div className="p-8 bg-blue-50 text-blue-600 rounded-full mb-6">
-            <Upload size={64} />
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 animate-in fade-in zoom-in duration-700">
+          <div className="max-w-2xl w-full px-6 text-center">
+            <div className="inline-flex p-5 bg-blue-50 text-blue-600 rounded-3xl mb-8 shadow-inner">
+              <Upload size={48} className="animate-bounce" />
+            </div>
+            
+            <h2 className="text-3xl font-extrabold text-slate-800 mb-4">
+              Bem-vindo ao Sistema de Auditoria PM/3
+            </h2>
+            <p className="text-slate-500 mb-12 text-lg leading-relaxed">
+              Carregue seu arquivo CSV para iniciar a análise de produtividade, 
+              identificar duplicidades e gerar relatórios oficiais.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 text-left">
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center mb-3">
+                  <CheckCircle size={20} />
+                </div>
+                <h4 className="font-bold text-slate-700 text-sm mb-1">Auditoria</h4>
+                <p className="text-xs text-slate-500">Detecção automática de IDs repetidos.</p>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-3">
+                  <TrendingUp size={20} />
+                </div>
+                <h4 className="font-bold text-slate-700 text-sm mb-1">Gráficos</h4>
+                <p className="text-xs text-slate-500">Visualização dinâmica de produtividade.</p>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center mb-3">
+                  <FileText size={20} />
+                </div>
+                <h4 className="font-bold text-slate-700 text-sm mb-1">Relatórios</h4>
+                <p className="text-xs text-slate-500">Exportação profissional em PDF.</p>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => {
+                setIsImporting(true);
+                setImportError(null);
+                setImportFile(null);
+              }}
+              className="group relative px-10 py-5 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-2xl shadow-blue-200 hover:bg-blue-700 hover:-translate-y-1 active:translate-y-0 transition-all duration-300 flex items-center gap-3 mx-auto"
+            >
+              <Upload size={24} className="group-hover:rotate-12 transition-transform" />
+              IMPORTAR ARQUIVO CSV
+              <div className="absolute -inset-1 bg-blue-400/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </button>
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Painel Pronto para Uso</h2>
-          <p className="text-slate-500 mb-10 max-w-md text-center px-6">
-            O sistema está vazio. Importe seu arquivo CSV de operações para começar a analisar os dados, visualizar gráficos e receber alertas automáticos.
-          </p>
-          <button 
-            onClick={() => {
-              setIsImporting(true);
-              setImportError(null);
-              setImportFile(null);
-            }}
-            className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-3 active:scale-95"
-          >
-            <Upload size={24} />
-            Importar Arquivo CSV
-          </button>
         </div>
       ) : (
         <>
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
-          <div className="p-3 bg-blue-100 rounded-xl text-blue-600">
-            <Info size={24} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
+              <div className="p-3 bg-slate-100 rounded-xl text-slate-600">
+                <FileText size={24} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total de Registros</p>
+                <p className="text-2xl font-bold text-slate-700">{stats.total}</p>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
+              <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
+                <CheckCircle size={24} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Operações</p>
+                <p className="text-2xl font-bold text-emerald-600">{stats.uniqueOperations}</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total de Registros</p>
-            <p className="text-2xl font-bold">{stats.total}</p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
-          <div className="p-3 bg-emerald-100 rounded-xl text-emerald-600">
-            <CheckCircle size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Operações Reais</p>
-            <p className="text-2xl font-bold text-emerald-600">{stats.uniqueOperations}</p>
-            <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
-              {stats.correctlyLaunched} sem duplicidade
-            </p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
-          <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">IDs Duplicados</p>
-            <p className="text-2xl font-bold text-amber-600">{stats.duplicates}</p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center space-x-4">
-          <div className="p-3 bg-rose-100 rounded-xl text-rose-600">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">UOpE c/ mais Repetições</p>
-            <p className="text-lg font-bold truncate max-w-[150px]" title={stats.mostDuplicatedUope?.name || "Nenhuma"}>
-              {stats.mostDuplicatedUope?.name || "Nenhuma"}
-            </p>
-            <p className="text-xs text-slate-400">{stats.mostDuplicatedUope?.count || 0} instâncias</p>
-          </div>
-        </div>
-      </div>
       
-      {/* Central de Relatórios - Fixed Section */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100">
-              <Upload size={24} className="rotate-180" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">Central de Relatórios</h2>
-              <p className="text-slate-500 text-sm">Gere documentos oficiais baseados nos dados atuais e filtros aplicados.</p>
-            </div>
+      <div className="bg-white p-8 rounded-3xl shadow-lg shadow-slate-200/60 border border-slate-200 mb-10 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="absolute top-0 left-0 w-2 h-full bg-blue-600"></div>
+        
+        <div className="flex items-center gap-6">
+          <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl shadow-inner">
+            <TrendingUp size={32} />
           </div>
+          <div>
+            <h2 className="text-2xl font-black text-slate-800">Central de Relatórios</h2>
+            <p className="text-slate-500">Emissão de documentos oficiais e estatísticos</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+          <button 
+            onClick={generateQuantityPDF} 
+            className="group flex-1 sm:flex-none px-8 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-slate-200 hover:scale-105 hover:shadow-xl transition-all duration-300 border border-slate-200"
+          >
+            <TrendingUp size={18} className="text-blue-600 group-hover:scale-125 transition-transform" />
+            RELATÓRIO DE PRODUTIVIDADE
+          </button>
           
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              onClick={generateQuantityPDF}
-              className="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 hover:border-blue-200 transition-all flex items-center justify-center gap-2 shadow-sm group"
-            >
-              <TrendingUp size={20} className="text-blue-500 group-hover:scale-110 transition-transform" />
-              Relatório Geral de Produtividade
-            </button>
-            <button
-              onClick={generatePDF}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 group"
-            >
-              <AlertTriangle size={20} className="group-hover:rotate-12 transition-transform" />
-              Relatório de Auditoria (Detalhado)
-            </button>
-          </div>
+          <button 
+            onClick={generatePDF} 
+            className="group flex-1 sm:flex-none px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-blue-700 hover:scale-105 hover:shadow-2xl hover:shadow-blue-200 transition-all duration-300"
+          >
+            <AlertTriangle size={18} className="text-blue-200 group-hover:rotate-12 transition-transform" />
+            RELATÓRIO DE AUDITORIA
+          </button>
         </div>
       </div>
 
@@ -553,8 +602,8 @@ export default function App() {
               <AlertTriangle size={20} className="animate-pulse" />
             </div>
             <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
-              Alerta de Prioridade: Números de Operação Duplicados
-              <span className="px-2 py-0.5 bg-amber-200 text-amber-800 text-xs rounded-full">{duplicateAlerts.length} IDs</span>
+              Alerta de Prioridade: Duplicidades Detectadas
+              <span className="px-2 py-0.5 bg-amber-200 text-amber-800 text-xs rounded-full">{filteredSummary.extraLines} Registros Duplicados</span>
             </h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -601,32 +650,35 @@ export default function App() {
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Distribuição por UOpE */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <h2 className="text-lg font-semibold mb-6 flex items-center">
-            <TrendingUp className="mr-2 text-blue-500" size={20} />
-            Distribuição por UOpE (Top 15)
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-bold text-slate-800">Distribuição por UOpE</h2>
+            <div className="flex gap-2">
+              <span className="px-3 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-md uppercase">Ranking (Top 10)</span>
+            </div>
+          </div>
           <div className="h-[400px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.byUope.slice(0, 15)} layout="vertical" margin={{ left: 20, right: 30 }}>
+              <BarChart data={stats.byUope.slice(0, 10)} layout="vertical" margin={{ left: 10, right: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide />
                 <YAxis 
                   dataKey="name" 
                   type="category" 
-                  width={140} 
+                  width={100} 
                   fontSize={10} 
                   tickLine={false} 
                   axisLine={false}
-                  tick={{ fill: '#64748b', fontWeight: 500 }}
+                  tick={{ fill: '#64748b', fontWeight: 600 }}
                 />
                 <Tooltip 
                   cursor={{fill: '#f8fafc'}}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={24}>
-                  {stats.byUope.slice(0, 15).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index < 3 ? '#2563eb' : '#60a5fa'} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20} label={{ position: 'right', fill: '#1e293b', fontSize: 11, fontWeight: 'bold' }}>
+                  {stats.byUope.slice(0, 10).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Bar>
               </BarChart>
@@ -634,38 +686,126 @@ export default function App() {
           </div>
         </div>
 
+        {/* Distribuição por Circunstância */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <h2 className="text-lg font-semibold mb-6 flex items-center">
-            <CheckCircle className="mr-2 text-emerald-500" size={20} />
-            Situação das Operações
-          </h2>
-          <div className="h-[350px] w-full">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Distribuição por Circunstância</h2>
+          <div className="h-[400px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={stats.byStatus}
+                  data={stats.byCircumstance}
                   cx="50%"
-                  cy="45%"
+                  cy="50%"
                   innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={8}
+                  outerRadius={130}
+                  paddingAngle={2}
                   dataKey="value"
-                  stroke="none"
+                  stroke="#fff"
+                  strokeWidth={2}
+                  label={({ name, value }) => `${value}`}
                 >
-                  {stats.byStatus.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {stats.byCircumstance.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
                 <Legend 
-                  verticalAlign="bottom" 
+                  verticalAlign="top" 
                   align="center"
-                  iconType="circle"
-                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="rect"
+                  wrapperStyle={{ paddingBottom: '20px' }}
                 />
               </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Evolução de Operações */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Evolução de Operações (Série Temporal)</h2>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.byDate} margin={{ top: 10, right: 10, left: -20, bottom: 40 }}>
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1e293b" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#1e293b" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  fontSize={10} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tick={{ fill: '#64748b', fontWeight: 500 }}
+                  angle={-45}
+                  textAnchor="end"
+                  interval={Math.ceil(stats.byDate.length / 10)}
+                />
+                <YAxis 
+                  fontSize={10} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tick={{ fill: '#64748b', fontWeight: 500 }}
+                />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Legend 
+                  verticalAlign="top" 
+                  align="center"
+                  iconType="rect"
+                  wrapperStyle={{ paddingBottom: '20px' }}
+                />
+                <Area 
+                  name="Operações por Dia"
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#1e293b" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorValue)" 
+                  dot={{ r: 4, fill: '#1e293b', strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Distribuição por Situação */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800 mb-6">Distribuição por Situação</h2>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.byStatus} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tick={{ fill: '#64748b', fontWeight: 600 }}
+                />
+                <YAxis 
+                  fontSize={10} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tick={{ fill: '#64748b', fontWeight: 500 }}
+                />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                />
+                <Bar dataKey="value" barSize={60} radius={[4, 4, 0, 0]}>
+                  {stats.byStatus.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.name] || COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -789,7 +929,7 @@ export default function App() {
                     {filteredData.length} Registros
                   </span>
                   <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase">
-                    {filteredSummary.totalDuplicates} Duplicados
+                    {filteredSummary.extraLines} Duplicados
                   </span>
                 </div>
               </div>
@@ -800,7 +940,6 @@ export default function App() {
                     <span className="text-[10px] font-bold text-slate-400 uppercase truncate">{stat.name}</span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-black text-slate-700">{stat.total}</span>
-                      <span className="text-[10px] font-bold text-amber-600">({stat.duplicates} dup)</span>
                     </div>
                   </div>
                 ))}
