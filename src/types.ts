@@ -13,9 +13,12 @@ export interface Operation {
 export interface DashboardStats {
   total: number;
   uniqueOperations: number;
+  correctlyLaunched: number;
   duplicates: number;
   byUope: { name: string; value: number }[];
   byStatus: { name: string; value: number }[];
+  byCircumstance: { name: string; value: number }[];
+  byDate: { name: string; value: number }[];
   duplicateIds: string[];
   mostDuplicatedUope?: { name: string; count: number };
   topDuplicatedUopes: { name: string; count: number }[];
